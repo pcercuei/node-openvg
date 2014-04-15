@@ -16,15 +16,12 @@
         "V8_CALLBACK_STYLE_<(callback_style)"
       ],
       "ldflags": [
-        "-L/opt/vc/lib",
-        "-lGLESv2"
+        "-lGLESv2 -lEGL -lOpenVG -lSDL2",
       ],
       "cflags": [
         "-DENABLE_GDB_JIT_INTERFACE",
         "-Wall",
-        "-I/opt/vc/include",
-        "-I/opt/vc/include/interface/vcos/pthreads",
-        "-I/opt/vc/include/interface/vmcs_host/linux"
+        "-I/usr/include/SDL2 -D_REENTRANT"
       ],
     },
     {
@@ -33,15 +30,12 @@
         "src/init-egl.cc"
       ],
       "ldflags": [
-        "-L/opt/vc/lib",
-        "-lGLESv2"
+        "-lGLESv2 -lEGL -lOpenVG -lSDL2",
       ],
       "cflags": [
         "-DENABLE_GDB_JIT_INTERFACE",
         "-Wall",
-        "-I/opt/vc/include",
-        "-I/opt/vc/include/interface/vcos/pthreads",
-        "-I/opt/vc/include/interface/vmcs_host/linux"
+        "-I/usr/include/SDL2 -D_REENTRANT"
       ],
     },
   ]

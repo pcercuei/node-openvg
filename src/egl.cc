@@ -1,8 +1,13 @@
 #include "EGL/egl.h"
 #include "GLES/gl.h"
+#include <SDL.h>
+#include <SDL_syswm.h>
 
+/* SDL2 defines this, but it will only confuse v8 */
+#undef None
+#undef True
+#undef False
 #include "egl.h"
-#include "bcm_host.h"
 
 #include "argchecks.h"
 
@@ -26,7 +31,6 @@ extern void egl::InitBindings(Handle<Object> target) {
 
 extern void egl::Init() {
   EGLBoolean result;
-  int32_t success = 0;
 
   static const EGLint attribute_list[] = {
     EGL_RED_SIZE, 8,
@@ -34,25 +38,58 @@ extern void egl::Init() {
     EGL_BLUE_SIZE, 8,
     EGL_ALPHA_SIZE, 8,
     EGL_ALPHA_MASK_SIZE, 8,
-    EGL_SURFACE_TYPE, EGL_WINDOW_BIT & EGL_SWAP_BEHAVIOR_PRESERVED_BIT,
     EGL_NONE
   };
 
   EGLint num_config;
 
-  VC_RECT_T dst_rect;
-  VC_RECT_T src_rect;
-  DISPMANX_ELEMENT_HANDLE_T dispman_element;
-  DISPMANX_DISPLAY_HANDLE_T dispman_display;
-  DISPMANX_UPDATE_HANDLE_T  dispman_update;
+  NativeWindowType windowtype;
+  SDL_Window *window;
+  SDL_SysWMinfo wminfo;
 
-  static EGL_DISPMANX_WINDOW_T nativewindow;
+  State.display = NULL;
+  SDL_Init(SDL_INIT_VIDEO);
 
-  // bcm_host_init() must be called before anything else
-  bcm_host_init();
+  window = SDL_CreateWindow("",
+			  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+			  320, 240, SDL_WINDOW_SHOWN);
+  SDL_VERSION(&wminfo.version);
+  SDL_GetWindowWMInfo(window, &wminfo);
 
-  // get an EGL display connection
-  State.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+  switch (wminfo.subsystem) {
+#ifdef SDL_VIDEO_DRIVER_WINDOWS
+	  case SDL_SYSWM_WINDOWS:
+		  windowtype = wminfo.info.win.window;
+		  break;
+#endif
+#ifdef SDL_VIDEO_DRIVER_X11
+	  case SDL_SYSWM_X11:
+		  State.display = eglGetDisplay(wminfo.info.x11.display);
+		  windowtype = wminfo.info.x11.window;
+		  break;
+#endif
+#ifdef SDL_VIDEO_DRIVER_DIRECTFB
+	  case SDL_SYSWM_DIRECTFB:
+		  windowtype = wminfo.dfb.window;
+		  break;
+#endif
+#ifdef SDL_VIDEO_DRIVER_COCOA
+	  case SDL_SYSWM_COCOA:
+		  windowtype = wminfo.cocoa.window;
+		  break;
+#endif
+#ifdef SDL_VIDEO_DRIVER_UIKIT
+	  case SDL_SYSWM_UIKIT:
+		  windowtype = wminfo.uikit.window;
+		  break;
+#endif
+	  default:
+		  windowtype = 0;
+		  break;
+  }
+
+  if (!State.display)
+	  State.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 
   result = eglInitialize(State.display, NULL, NULL);
   assert(EGL_FALSE != result);
@@ -70,38 +107,8 @@ extern void egl::Init() {
     eglCreateContext(State.display, egl::Config, EGL_NO_CONTEXT, NULL);
   assert(State.context != EGL_NO_CONTEXT);
 
-  // create an EGL window surface
-  success = graphics_get_display_size(0 /* LCD */ , &State.screen_width,
-                                      &State.screen_height);
-  assert(success >= 0);
-
-  dst_rect.x = 0;
-  dst_rect.y = 0;
-  dst_rect.width  = State.screen_width;
-  dst_rect.height = State.screen_height;
-
-  src_rect.x = 0;
-  src_rect.y = 0;
-  src_rect.width  = State.screen_width  << 16;
-  src_rect.height = State.screen_height << 16;
-
-  dispman_display = vc_dispmanx_display_open(0 /* LCD */ );
-  dispman_update  = vc_dispmanx_update_start(0);
-
-  dispman_element =
-    vc_dispmanx_element_add(dispman_update, dispman_display, 0 /*layer */ ,
-                            &dst_rect, 0 /*src */ , &src_rect,
-                            DISPMANX_PROTECTION_NONE,
-                            0 /*alpha */ , 0 /*clamp */ ,
-                            DISPMANX_NO_ROTATE /*transform */);
-
-  nativewindow.element = dispman_element;
-  nativewindow.width   = State.screen_width;
-  nativewindow.height  = State.screen_height;
-  vc_dispmanx_update_submit_sync(dispman_update);
-
   State.surface =
-    eglCreateWindowSurface(State.display, egl::Config, &nativewindow, NULL);
+    eglCreateWindowSurface(State.display, egl::Config, windowtype, NULL);
   assert(State.surface != EGL_NO_SURFACE);
 
   // connect the context to the surface
@@ -134,10 +141,6 @@ extern void egl::Finish() {
   eglDestroySurface(State.display, State.surface);
   eglDestroyContext(State.display, State.context);
   eglTerminate(State.display);
-
-#ifdef __VIDEOCORE__
-  bcm_host_deinit();
-#endif
 }
 
 
